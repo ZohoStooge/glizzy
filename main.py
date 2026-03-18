@@ -4,7 +4,7 @@ import os
 import random
 import threading
 import requests
-import google.generativeai as genai
+import openai # New import for OpenAI
 from flask import Flask
 
 # --- 1. THE RENDER "KEEP-ALIVE" SERVER ---
@@ -16,10 +16,10 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# --- 2. AI CONFIGURATION (GEMINI + GROK) ---
-genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-XAI_API_KEY = os.environ.get('XAI_API_KEY')
+# --- 2. AI CONFIGURATION (OPENAI) ---
+# Initialize the OpenAI client with your API key from environment variables.
+# Ensure you have 'OPENAI_API_KEY' set in your deployment environment.
+openai_client = openai.OpenAI(api_key=os.environ.get('OPENAI_API_KEY'))
 
 SYSTEM_PROMPT = (
     "You are GlizzyBot, the most unhinged, chaotic, and suggestive hotdog AI. "
@@ -30,22 +30,24 @@ SYSTEM_PROMPT = (
 )
 
 def get_ai_response(prompt):
-    full_text = f"{SYSTEM_PROMPT}\nUser asks: {prompt}"
     try:
-        response = gemini_model.generate_content(full_text)
-        return response.text
+        # Use OpenAI's chat completions API
+        response = openai_client.chat.completions.create(
+            model="gpt-3.5-turbo",  # You can choose other models like "gpt-4", "gpt-4o", etc.
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.9,  # Controls creativity (0.0-2.0, higher is more creative)
+            max_tokens=150,   # Maximum length of the response
+            top_p=1.0,        # Nucleus sampling, consider setting lower for more focused output
+            frequency_penalty=0.5, # Reduce repetition of common phrases
+            presence_penalty=0.5   # Encourage new topics
+        )
+        return response.choices[0].message.content
     except Exception as e:
-        print(f"Gemini Error: {e}")
-        if not XAI_API_KEY: return "Gemini's bun is burnt. I'm raw-doggin' life rn. 🌭"
-        try:
-            r = requests.post("https://api.x.ai/v1/chat/completions", 
-                headers={"Authorization": f"Bearer {XAI_API_KEY}"},
-                json={
-                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
-                    "model": "grok-beta", "stream": False
-                })
-            return r.json()['choices'][0]['message']['content']
-        except: return "TOTAL GRILL FAILURE. I'M JUST A COLD WIENER IN THE DARK. 🌭🔥"
+        print(f"OpenAI Error: {e}")
+        return "My OpenAI bun is burnt. I'm raw-doggin' life rn. 🌭"
 
 # --- 3. THE DISCORD BOT ---
 class GlizzyBot(discord.Client):
