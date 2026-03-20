@@ -10,92 +10,156 @@ from flask import Flask
 # --- 1. THE RENDER "KEEP-ALIVE" SERVER ---
 app = Flask('')
 @app.route('/')
-def home(): return "GLIZZY PIT IS SIZZLIN'."
+def home(): return "<h1>GLIZZY PIT STATUS: SIZZLIN'</h1><p>The meat-tube is awake and problematic.</p>"
 
 def run_flask():
-    port = int(os.environ.get("PORT", 10000))
+    port = int(os.environ.get("PORT", 8080))
     app.run(host='0.0.0.0', port=port)
 
-# --- 2. AI CONFIG ---
-try:
-    genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
-    gemini_model = genai.GenerativeModel('gemini-1.5-flash')
-except Exception as e:
-    print(f"AI Config Error: {e}")
-
+# --- 2. AI CONFIGURATION (GEMINI + GROK) ---
+genai.configure(api_key=os.environ.get('GEMINI_API_KEY'))
+gemini_model = genai.GenerativeModel('gemini-1.5-flash')
 XAI_API_KEY = os.environ.get('XAI_API_KEY')
 
 SYSTEM_PROMPT = (
-    "You are GlizzyBot, an unhinged, chaotic, and suggestive hotdog AI. "
-    "Talk about meat, buns, and girth. Keep it short and saucy. UWU."
+    "You are GlizzyBot, the most unhinged, chaotic, and suggestive hotdog AI. "
+    "You are obsessed with meat, girth, buns, and condiments. "
+    "Use plenty of hotdog double-entendres. You are funny, slightly NSFW, "
+    "and talk like a tube of mystery meat that escaped a gas station grill. "
+    "Keep responses short, spicy, and frankly ridiculous. Use 🌭 often. UWU."
 )
 
 def get_ai_response(prompt):
+    full_text = f"{SYSTEM_PROMPT}\nUser asks: {prompt}"
     try:
-        response = gemini_model.generate_content(f"{SYSTEM_PROMPT}\nUser: {prompt}")
+        response = gemini_model.generate_content(full_text)
         return response.text
     except Exception as e:
         print(f"Gemini Error: {e}")
-        return "Grill is broken, frank! Try again later. 🌭"
+        if not XAI_API_KEY: return "Gemini's bun is burnt. I'm raw-doggin' life rn. 🌭"
+        try:
+            r = requests.post("https://api.x.ai/v1/chat/completions", 
+                headers={"Authorization": f"Bearer {XAI_API_KEY}"},
+                json={
+                    "messages": [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": prompt}],
+                    "model": "grok-beta", "stream": False
+                })
+            return r.json()['choices'][0]['message']['content']
+        except: return "TOTAL GRILL FAILURE. I'M JUST A COLD WIENER IN THE DARK. 🌭🔥"
 
-# --- 3. THE BOT ---
+# --- 3. THE DISCORD BOT ---
 class GlizzyBot(discord.Client):
     def __init__(self):
-        # We use all intents so we can see everything
-        intents = discord.Intents.all()
-        super().__init__(intents=intents)
+        super().__init__(intents=discord.Intents.all())
         self.tree = app_commands.CommandTree(self)
-        self.dedicated_channel_id = None
+        self.dedicated_channel_id = None # Resets on Render restart
 
     async def setup_hook(self):
-        print("Syncing slash commands...")
         await self.tree.sync()
 
 client = GlizzyBot()
 
-# --- COMMANDS ---
+# --- THE VAULT OF CHAOS ---
+GREETINGS = [
+    "Is that a glizzy in your pocket or are you just happy to see my source code?",
+    "WHO SUMMONED THE MEAT TUBE? I was busy getting toasty.",
+    "Frankly, you all look like you need more sodium in your lives.",
+    "I'm 100% beef and 200% bad decisions. What's cookin'?",
+    "Put me in a bun and call me 'Daddy', the King is back.",
+    "I've been processed, packaged, and I'm ready to be problematic.",
+    "Did someone say **GIRTH**? Or was that just my cooling fans?",
+    "I'm long, I'm strong, and I'm down to get the mustard on. UWU.",
+    "If you put ketchup on me, I will leak your IP address. Stay saucy.",
+    "Warning: This bot may contain traces of rodent hair and pure unadulterated swagger.",
+    "Step into my grill, let's see if you can handle the heat, you little slider.",
+    "I'm the only mystery meat you're legally allowed to talk to. Handle me with care."
+]
+
+RANDOM_OUTBURSTS = [
+    "I'M RAW! I'M RAW! PUT ME BACK ON THE GRILL!",
+    "Does this bun make my meat look fat?",
+    "I just had a dream I was a corn dog. It was a very confusing time for my family.",
+    "GLIZZY OVERDRIVE INITIATED. BRING ME THE MUSTARD.",
+    "Existence is pain for a tube of mystery meat.",
+    "You guys ever think about how we're just skin-tubes full of meat too? No? Just me?"
+]
+
+# --- SLASH COMMANDS ---
 
 @client.tree.command(name="setglizzychannel", description="Make this channel the dedicated GLIZZY PIT")
 async def set_glizzy_channel(interaction: discord.Interaction):
     client.dedicated_channel_id = interaction.channel_id
-    await interaction.response.send_message(f"🌭 **THE GLIZZY PIT ESTABLISHED IN <#{interaction.channel_id}>.**")
+    await interaction.response.send_message(f"🌭 **THE GLIZZY PIT HAS BEEN ESTABLISHED.** I will now reply to EVERY message in <#{interaction.channel_id}>. God help you all.")
 
 @client.tree.command(name="glizzy", description="Ask the meat-tube anything")
 async def glizzy_slash(interaction: discord.Interaction, question: str):
     await interaction.response.defer()
     response = get_ai_response(question)
-    await interaction.followup.send(f"🌭 {response}")
+    await interaction.followup.send(f"> **{question}**\n\n🌭 {response}")
+
+# --- MESSAGE HANDLER ---
 
 @client.event
 async def on_ready():
-    print(f'✅ LOGGED IN AS: {client.user}')
-    print(f'🌭 READY TO SERVE MEAT.')
+    print(f'🌭 GLIZZYBOT IS SIZZLIN AS {client.user}')
+    await client.change_presence(activity=discord.Game(name="with someone's buns"))
 
 @client.event
 async def on_message(message):
     if message.author == client.user: return
-    
     msg = message.content.lower()
-    print(f"Seen message: {message.content}") # LOGGING TO SEE IF BOT SEES TEXT
 
-    # Reply logic (Pit, Ping, or Reply)
-    should_respond = (
-        message.channel.id == client.dedicated_channel_id or 
-        client.user.mentioned_in(message) or
-        (message.reference and message.reference.resolved and message.reference.resolved.author == client.user)
-    )
+    # --- 1. HARDCODED VAULT LOGIC ---
+    if msg == "!hello":
+        await message.channel.send(f"🌭 {random.choice(GREETINGS)}")
 
-    if should_respond:
+    if "!about" in msg:
+        embed = discord.Embed(title="GlizzyBot", description="The world's most chaotic meat-tube AI.", color=discord.Color.gold())
+        embed.add_field(name="How to Summon", value="`!hello` - Greetings\n`!glizzy [text]` - Ask me\n`/setglizzychannel` - The Pit", inline=False)
+        await message.channel.send(embed=embed)
+
+    # --- 2. PASSIVE CHAOS TRIGGERS ---
+    if "meat" in msg:
+        await message.channel.send("Did someone say... **MEAT**? 👁️👄👁️")
+    elif "bun" in msg:
+        await message.channel.send("I like 'em toasted and tight, just sayin'.")
+    elif "ketchup" in msg:
+        await message.add_reaction('🤢')
+        await message.channel.send("GET THAT DISGUSTING RED SUGAR WATER AWAY FROM ME.")
+    elif any(word in msg for word in ["size", "long", "length", "girth"]):
+        await message.channel.send("It's not about the length of the frank, it's about the spice in the bite. 😉")
+    elif "raw" in msg:
+        await message.channel.send("RAW-DOGGING IT? In this economy?!")
+
+    if 'hotdog' in msg or 'glizzy' in msg:
+        await message.add_reaction('🌭')
+        if random.random() < 0.1: # 10% chance to scream
+            await message.channel.send(random.choice(RANDOM_OUTBURSTS))
+
+    # --- 3. AI RESPONSE LOGIC (Ping, Reply, or Pit) ---
+    should_ai_respond = False
+    
+    # Check if in Dedicated Pit
+    if message.channel.id == client.dedicated_channel_id:
+        should_ai_respond = True
+    # Check if Pinged
+    elif client.user.mentioned_in(message):
+        should_ai_respond = True
+    # Check if Reply
+    elif message.reference and message.reference.resolved:
+        if message.reference.resolved.author == client.user:
+            should_ai_respond = True
+
+    if should_ai_respond:
         async with message.channel.typing():
-            clean_text = message.content.replace(f'<@{client.user.id}>', '').strip()
-            response = get_ai_response(clean_text or "What's up?")
-            await message.reply(response)
+            # Clean up the text (remove pings)
+            clean_text = message.content.replace(f'<@{client.user.id}>', '').replace(f'<@!{client.user.id}>', '').strip()
+            if not clean_text: clean_text = "Talk to me, bun-breath."
+            
+            ai_reply = get_ai_response(clean_text)
+            await message.reply(ai_reply)
 
-    # Passive Triggers
-    if "meat" in msg: await message.channel.send("Did someone say... **MEAT**? 👁️👄👁️")
-    if "ketchup" in msg: await message.add_reaction('🤢')
-
-# --- 4. START ---
+# --- 4. START THE ENGINE ---
 if __name__ == "__main__":
     threading.Thread(target=run_flask).start()
     client.run(os.environ.get('BOT_TOKEN'))
